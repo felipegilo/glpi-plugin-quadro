@@ -2,11 +2,10 @@
 
 namespace GlpiPlugin\Quadros;
 
-use CommonDBTM;
+use GlpiPlugin\Quadros\Compat\BaseItem;
 
-class Cartao extends CommonDBTM
+class Cartao extends BaseItem
 {
-    public static $rightname = 'plugin_quadros';
 
     public const TABLE_MEMBROS     = 'glpi_plugin_quadros_cartoes_users';
     public const TABLE_CHECKLIST   = 'glpi_plugin_quadros_checklist';

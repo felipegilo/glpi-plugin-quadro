@@ -18,8 +18,12 @@ Plugin para o **GLPI 11** com quadros de tarefas no estilo **Trello** (Kanban): 
 
 ## Requisitos
 
-- GLPI 11.0.x
-- PHP 8.2 ou superior
+| GLPI | PHP |
+|------|-----|
+| 11.0.x | 8.2 ou superior |
+| 12.0.x | 8.3 ou superior (exigência do GLPI 12; ele também pede MariaDB 10.11 ou MySQL 8.0) |
+
+O mesmo código funciona nas duas versões (testado em GLPI 11.0.7 e GLPI 12.0.2, ambos com PHP 8.4). Detalhes na seção *Compatibilidade GLPI 11 / 12*.
 
 ## Instalação
 
@@ -31,11 +35,16 @@ Plugin para o **GLPI 11** com quadros de tarefas no estilo **Trello** (Kanban): 
    chown -R www-data:www-data quadros
    ```
 
-2. No GLPI, vá em **Configurar > Plugins**, clique em **Instalar** e depois em **Ativar**. Ou pelo console:
+2. No GLPI, vá em **Configurar > Plugins**, clique em **Instalar** e depois em **Ativar**. Ou pelo console (os nomes dos comandos mudaram no GLPI 12):
 
    ```bash
+   # GLPI 11
    sudo -u www-data php bin/console glpi:plugin:install quadros --username=<usuario>
    sudo -u www-data php bin/console glpi:plugin:activate quadros
+
+   # GLPI 12
+   sudo -u www-data php bin/console plugin:install quadros --username=<usuario>
+   sudo -u www-data php bin/console plugin:activate quadros
    ```
 
 3. Em **Administração > Perfis**, abra o perfil desejado, aba **Quadros**, e conceda os direitos.
@@ -75,6 +84,14 @@ quadros/
 - `glpi_plugin_quadros_comentarios`
 
 A desinstalação remove essas tabelas e os direitos do plugin.
+
+## Compatibilidade GLPI 11 / 12
+
+- **Propriedades tipadas:** no GLPI 12 as propriedades `CommonDBTM::$dohistory` e `CommonGLPI::$rightname` passaram a ser tipadas (`bool` e `string`); no GLPI 11 não têm tipo. O PHP exige o mesmo tipo na classe filha, então o plugin usa uma classe base intermediária (`src/Compat/BaseItem.php`) que declara `$rightname` conforme a versão detectada por reflexão, e define `$dohistory` no construtor.
+- **Assinaturas de métodos:** todos os métodos sobrescritos têm assinatura idêntica nas duas versões.
+- **Console:** os comandos `glpi:plugin:*` do GLPI 11 viraram `plugin:*` no GLPI 12.
+- **Reautenticação:** o GLPI 12 pede a senha novamente ao abrir *Administração > Perfis* (recurso do núcleo). Depois disso a aba **Quadros** aparece normalmente.
+- **Biblioteca de arrastar:** continua sendo a `html5sortable` embutida no GLPI (`Html::requireJs('sortable')`).
 
 ## Segurança
 

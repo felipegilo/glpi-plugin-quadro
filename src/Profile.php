@@ -9,8 +9,6 @@ use Session;
 
 class Profile extends CommonDBTM
 {
-    public static $rightname = 'profile';
-
     public function getTabNameForItem(CommonGLPI $item, $withtemplate = 0)
     {
         if ($item instanceof \Profile && $item->getField('id')) {

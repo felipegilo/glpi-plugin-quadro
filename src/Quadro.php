@@ -4,12 +4,17 @@ namespace GlpiPlugin\Quadros;
 
 use CommonDBTM;
 use Glpi\Application\View\TemplateRenderer;
+use GlpiPlugin\Quadros\Compat\BaseItem;
 use Session;
 
-class Quadro extends CommonDBTM
+class Quadro extends BaseItem
 {
-    public static $rightname = 'plugin_quadros';
-    public $dohistory        = true;
+    public function __construct()
+    {
+        parent::__construct();
+        // Historico de alteracoes (propriedade tipada no GLPI 12: por isso e atribuida aqui)
+        $this->dohistory = true;
+    }
 
     public static function getTable($classname = null)
     {

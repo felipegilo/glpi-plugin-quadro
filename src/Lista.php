@@ -2,11 +2,10 @@
 
 namespace GlpiPlugin\Quadros;
 
-use CommonDBTM;
+use GlpiPlugin\Quadros\Compat\BaseItem;
 
-class Lista extends CommonDBTM
+class Lista extends BaseItem
 {
-    public static $rightname = 'plugin_quadros';
 
     public static function getTable($classname = null)
     {
