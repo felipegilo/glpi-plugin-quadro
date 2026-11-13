@@ -7,6 +7,7 @@
          <i class="ti ti-arrow-left"></i> Quadros
       </a>
       <h2 class="qd-title">{{ board_name }}</h2>
+      <span class="qd-hint"><i class="ti ti-info-circle"></i> Clique em um cartão para ver e editar prazo, cor, membros e descrição</span>
       <div class="ms-auto d-flex gap-2">
          <button type="button" id="qd-refresh" class="btn btn-sm btn-light" title="Atualizar">
             <i class="ti ti-refresh"></i>
@@ -42,7 +43,10 @@
 .qd-card:hover { background: #f4f5f7; }
 .qd-card.is-done .qd-card-title { color: #5e6c84; text-decoration: line-through; }
 .qd-stripe { height: 8px; margin: -8px -10px 8px; }
-.qd-card-title { font-size: .9rem; word-break: break-word; white-space: pre-wrap; }
+.qd-card-title { font-size: .9rem; word-break: break-word; white-space: pre-wrap; padding-right: 22px; }
+.qd-edit-btn { position: absolute; top: 6px; right: 6px; border: 0; background: transparent; color: #44546f; border-radius: 4px; padding: 1px 4px; line-height: 1; opacity: .5; }
+.qd-card:hover .qd-edit-btn, .qd-edit-btn:focus { opacity: 1; background: rgba(9,30,66,.1); }
+.qd-hint { color: rgba(255,255,255,.85); font-size: .8rem; }
 .qd-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 8px; }
 .qd-badges { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .qd-badge { display: inline-flex; align-items: center; gap: 3px; font-size: .75rem; padding: 1px 6px; border-radius: 4px; background: rgba(9,30,66,.08); color: #44546f; }
@@ -161,6 +165,7 @@
          var avatars = c.members.map(function (m) { return el('span', { class: 'qd-avatar', title: m.label, text: m.initials }); });
          return el('div', { class: 'qd-card' + (c.is_done ? ' is-done' : ''), 'data-id': c.id, onclick: function () { openCard(c.id); } },
             c.cor && COLORS[c.cor] ? el('div', { class: 'qd-stripe', style: 'background:' + COLORS[c.cor] }) : null,
+            el('button', { type: 'button', class: 'qd-edit-btn', title: 'Abrir detalhes do cartão', onclick: function (e) { e.stopPropagation(); openCard(c.id); } }, el('i', { class: 'ti ti-pencil' })),
             el('div', { class: 'qd-card-title' }, c.is_done ? el('i', { class: 'ti ti-circle-check me-1' }) : null, c.name),
             (badges.length || avatars.length) ? el('div', { class: 'qd-card-foot' }, el('div', { class: 'qd-badges' }, badges), el('div', { class: 'qd-members' }, avatars)) : null
          );
@@ -318,13 +323,20 @@
       // ------------------------------------------------------------ modal do cartao
       function withUsers(cb) {
          if (users) { return cb(users); }
-         api('usuarios').then(function (u) { users = u; cb(u); });
+         api('usuarios').then(function (u) { users = u; cb(u); }).catch(function () { cb([]); });
       }
 
       function openCard(id) {
          var card = findCard(id);
          if (!card) { return; }
-         withUsers(function (all) { buildModal(card, all); });
+         withUsers(function (all) {
+            try {
+               buildModal(card, all);
+            } catch (err) {
+               if (window.console) { console.error(err); }
+               toastErr('Não foi possível abrir os detalhes do cartão.');
+            }
+         });
       }
 
       function buildModal(card, all) {
@@ -393,7 +405,13 @@
          );
          document.body.append(modalEl);
          var modal = new bootstrap.Modal(modalEl);
-         modalEl.addEventListener('hidden.bs.modal', function () { modal.dispose(); modalEl.remove(); });
+         function onEsc(e) { if (e.key === 'Escape') { modal.hide(); } }
+         document.addEventListener('keydown', onEsc);
+         modalEl.addEventListener('hidden.bs.modal', function () {
+            document.removeEventListener('keydown', onEsc);
+            modal.dispose();
+            modalEl.remove();
+         });
 
          function save() {
             var name = titleInput.value.trim();
