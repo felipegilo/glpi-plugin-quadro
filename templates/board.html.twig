@@ -1,0 +1,436 @@
+<div id="qd-app" class="qd-app"
+     data-url="{{ ajax_url }}"
+     data-board="{{ board_id }}"
+     data-canedit="{{ can_edit ? 1 : 0 }}">
+   <div class="qd-toolbar">
+      <a href="{{ list_url }}" class="btn btn-sm btn-light" title="Voltar para a lista de quadros">
+         <i class="ti ti-arrow-left"></i> Quadros
+      </a>
+      <h2 class="qd-title">{{ board_name }}</h2>
+      <div class="ms-auto d-flex gap-2">
+         <button type="button" id="qd-refresh" class="btn btn-sm btn-light" title="Atualizar">
+            <i class="ti ti-refresh"></i>
+         </button>
+         {% if can_edit %}
+            <a href="{{ config_url }}" class="btn btn-sm btn-light" title="Renomear, descrição e exclusão do quadro">
+               <i class="ti ti-settings"></i> Configurações
+            </a>
+         {% endif %}
+      </div>
+   </div>
+   <div id="qd-board" class="qd-board"><div class="qd-loading">Carregando…</div></div>
+</div>
+
+{% verbatim %}
+<style>
+.qd-app { background: linear-gradient(135deg, #0079bf, #5067c5); border-radius: 8px; padding: 12px; margin: 0 0 12px; color: #172b4d; }
+.qd-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.qd-title { color: #fff; font-size: 1.35rem; font-weight: 700; margin: 0; }
+.qd-board { display: flex; align-items: flex-start; gap: 12px; overflow-x: auto; padding-bottom: 12px; min-height: 60vh; }
+.qd-loading { color: #fff; padding: 24px; }
+.qd-list, .qd-newlist { flex: 0 0 280px; width: 280px; background: #f1f2f4; border-radius: 10px; padding: 8px; box-shadow: 0 1px 1px rgba(9,30,66,.25); max-height: calc(100vh - 230px); display: flex; flex-direction: column; }
+.qd-newlist { background: rgba(255,255,255,.28); box-shadow: none; }
+.qd-newlist:hover { background: rgba(255,255,255,.4); }
+.qd-list-head { display: flex; align-items: center; gap: 6px; padding: 4px 6px 8px; cursor: grab; }
+.qd-list-title { flex: 1; font-weight: 700; font-size: .95rem; padding: 2px 4px; border-radius: 4px; word-break: break-word; cursor: pointer; }
+.qd-list-title:hover { background: rgba(9,30,66,.08); }
+.qd-count { background: rgba(9,30,66,.12); border-radius: 10px; padding: 0 8px; font-size: .75rem; font-weight: 600; }
+.qd-icon-btn { border: 0; background: transparent; color: #44546f; border-radius: 4px; padding: 2px 6px; line-height: 1; }
+.qd-icon-btn:hover { background: rgba(9,30,66,.12); color: #172b4d; }
+.qd-cards { flex: 1 1 auto; overflow-y: auto; min-height: 12px; padding: 2px; display: flex; flex-direction: column; gap: 8px; }
+.qd-card { background: #fff; border-radius: 8px; box-shadow: 0 1px 1px rgba(9,30,66,.25); padding: 8px 10px; cursor: pointer; position: relative; overflow: hidden; }
+.qd-card:hover { background: #f4f5f7; }
+.qd-card.is-done .qd-card-title { color: #5e6c84; text-decoration: line-through; }
+.qd-stripe { height: 8px; margin: -8px -10px 8px; }
+.qd-card-title { font-size: .9rem; word-break: break-word; white-space: pre-wrap; }
+.qd-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 8px; }
+.qd-badges { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.qd-badge { display: inline-flex; align-items: center; gap: 3px; font-size: .75rem; padding: 1px 6px; border-radius: 4px; background: rgba(9,30,66,.08); color: #44546f; }
+.qd-badge.overdue { background: #ca3521; color: #fff; }
+.qd-badge.soon { background: #f5cd47; color: #172b4d; }
+.qd-badge.done { background: #4bce97; color: #172b4d; }
+.qd-badge-ico { color: #44546f; font-size: .9rem; }
+.qd-members { display: flex; flex-direction: row-reverse; margin-left: auto; }
+.qd-avatar { width: 26px; height: 26px; border-radius: 50%; background: #0c66e4; color: #fff; font-size: .68rem; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; margin-left: -4px; border: 2px solid #fff; }
+.qd-ghost { opacity: .35; background: #c9d3e0 !important; }
+.qd-placeholder { background: #c9d3e0; border: 2px dashed #8590a2; border-radius: 8px; min-height: 36px; }
+.qd-placeholder-list { flex: 0 0 280px; width: 280px; background: rgba(255,255,255,.25); border: 2px dashed rgba(255,255,255,.7); border-radius: 10px; }
+.sortable-dragging { opacity: .45; }
+.qd-add { padding: 6px 2px 0; }
+.qd-add-btn { width: 100%; text-align: left; border: 0; background: transparent; color: #44546f; padding: 6px 8px; border-radius: 6px; }
+.qd-add-btn:hover { background: rgba(9,30,66,.1); color: #172b4d; }
+.qd-input { width: 100%; border: 2px solid #388bff; border-radius: 6px; padding: 6px 8px; resize: none; color: #172b4d; background: #fff; }
+.qd-add-actions { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+.qd-swatches { display: flex; gap: 6px; flex-wrap: wrap; }
+.qd-swatch { width: 32px; height: 24px; border-radius: 4px; border: 2px solid transparent; cursor: pointer; padding: 0; }
+.qd-swatch.sel { border-color: #172b4d; box-shadow: 0 0 0 2px #fff inset; }
+.qd-swatch.none { background: repeating-linear-gradient(45deg, #fff, #fff 4px, #dfe1e6 4px, #dfe1e6 8px); border-color: #c1c7d0; }
+.qd-swatch.none.sel { border-color: #172b4d; }
+.qd-userlist { max-height: 180px; overflow-y: auto; border: 1px solid var(--tblr-border-color, #dce0e8); border-radius: 6px; padding: 4px 8px; }
+.qd-userlist label { display: flex; align-items: center; gap: 8px; padding: 3px 0; margin: 0; cursor: pointer; }
+</style>
+
+<script>
+(function () {
+   function init() {
+      var root = document.getElementById('qd-app');
+      if (!root || root.dataset.ready) { return; }
+      if (typeof sortable === 'undefined' || typeof $ === 'undefined') {
+         var msg = document.getElementById('qd-board');
+         if (msg) { msg.textContent = 'Não foi possível carregar a biblioteca de arrastar e soltar do GLPI.'; }
+         return;
+      }
+      root.dataset.ready = '1';
+
+      var URL = root.dataset.url;
+      var BOARD = parseInt(root.dataset.board, 10);
+      var CAN_EDIT = root.dataset.canedit === '1';
+      var boardEl = document.getElementById('qd-board');
+      var COLORS = { green: '#61bd4f', yellow: '#f2d600', orange: '#ff9f1a', red: '#eb5a46', purple: '#c377e0', blue: '#0079bf' };
+      var COLOR_NAMES = { '': 'Sem cor', green: 'Verde', yellow: 'Amarelo', orange: 'Laranja', red: 'Vermelho', purple: 'Roxo', blue: 'Azul' };
+      var state = { listas: [] };
+      var users = null;
+
+      function toastErr(msg) {
+         if (typeof glpi_toast_error === 'function') { glpi_toast_error(msg); } else { alert(msg); }
+      }
+
+      function api(action, data) {
+         return new Promise(function (resolve, reject) {
+            $.ajax({
+               url: URL, type: 'POST', dataType: 'json',
+               data: Object.assign({ action: action, quadros_id: BOARD }, data || {})
+            }).done(function (r) {
+               if (r && r.ok) { resolve(r.data); } else { toastErr((r && r.error) || 'Erro inesperado.'); reject(r); }
+            }).fail(function () {
+               toastErr('Falha de comunicação com o servidor.'); reject();
+            });
+         });
+      }
+
+      function el(tag, props) {
+         var e = document.createElement(tag);
+         props = props || {};
+         Object.keys(props).forEach(function (k) {
+            var v = props[k];
+            if (v === null || v === undefined || v === false) { return; }
+            if (k === 'class') { e.className = v; }
+            else if (k === 'text') { e.textContent = v; }
+            else if (k === 'style') { e.style.cssText = v; }
+            else if (k.indexOf('on') === 0) { e.addEventListener(k.slice(2), v); }
+            else { e.setAttribute(k, v === true ? '' : v); }
+         });
+         for (var i = 2; i < arguments.length; i++) { append(e, arguments[i]); }
+         return e;
+      }
+      function append(parent, child) {
+         if (child === null || child === undefined || child === false) { return; }
+         if (Array.isArray(child)) { child.forEach(function (c) { append(parent, c); }); return; }
+         parent.append(child.nodeType ? child : document.createTextNode(String(child)));
+      }
+
+      function pad(n) { return (n < 10 ? '0' : '') + n; }
+      function todayStr() { var d = new Date(); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+      function fmtDue(s) { var p = s.split('-'); return p[2] + '/' + p[1]; }
+      function dueClass(c) {
+         if (c.is_done) { return 'done'; }
+         var t = todayStr();
+         if (c.date_due < t) { return 'overdue'; }
+         var d = new Date(); d.setDate(d.getDate() + 1);
+         if (c.date_due <= d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate())) { return 'soon'; }
+         return '';
+      }
+      function findList(id) { return state.listas.find(function (l) { return l.id === id; }); }
+      function findCard(id) {
+         for (var i = 0; i < state.listas.length; i++) {
+            var c = state.listas[i].cartoes.find(function (x) { return x.id === id; });
+            if (c) { return c; }
+         }
+         return null;
+      }
+
+      // ------------------------------------------------------------ renderizacao
+      function cardEl(c) {
+         var badges = [];
+         if (c.date_due) {
+            badges.push(el('span', { class: 'qd-badge ' + dueClass(c), title: 'Prazo' }, el('i', { class: 'ti ti-clock' }), fmtDue(c.date_due)));
+         }
+         if (c.description) {
+            badges.push(el('span', { class: 'qd-badge-ico', title: 'Possui descrição' }, el('i', { class: 'ti ti-align-left' })));
+         }
+         var avatars = c.members.map(function (m) { return el('span', { class: 'qd-avatar', title: m.label, text: m.initials }); });
+         return el('div', { class: 'qd-card' + (c.is_done ? ' is-done' : ''), 'data-id': c.id, onclick: function () { openCard(c.id); } },
+            c.cor && COLORS[c.cor] ? el('div', { class: 'qd-stripe', style: 'background:' + COLORS[c.cor] }) : null,
+            el('div', { class: 'qd-card-title' }, c.is_done ? el('i', { class: 'ti ti-circle-check me-1' }) : null, c.name),
+            (badges.length || avatars.length) ? el('div', { class: 'qd-card-foot' }, el('div', { class: 'qd-badges' }, badges), el('div', { class: 'qd-members' }, avatars)) : null
+         );
+      }
+
+      function editListTitle(span, l) {
+         if (!CAN_EDIT) { return; }
+         var input = el('input', { class: 'qd-input', type: 'text', value: l.name, maxlength: 255 });
+         span.replaceWith(input);
+         input.focus(); input.select();
+         var done = false;
+         function finish(save) {
+            if (done) { return; }
+            done = true;
+            var v = input.value.trim();
+            if (save && v && v !== l.name) {
+               api('lista_rename', { id: l.id, name: v }).then(function () { l.name = v; }).finally(render);
+            } else { render(); }
+         }
+         input.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') { finish(true); } else if (e.key === 'Escape') { finish(false); }
+         });
+         input.addEventListener('blur', function () { finish(true); });
+      }
+
+      function addCardBox(l) {
+         var wrap = el('div', { class: 'qd-add' });
+         var btn = el('button', { type: 'button', class: 'qd-add-btn' }, el('i', { class: 'ti ti-plus' }), ' Adicionar cartão');
+         btn.addEventListener('click', function () {
+            var ta = el('textarea', { class: 'qd-input', rows: '2', placeholder: 'Título do cartão…', maxlength: 255 });
+            var ok = el('button', { type: 'button', class: 'btn btn-primary btn-sm', text: 'Adicionar' });
+            var cancel = el('button', { type: 'button', class: 'btn btn-sm btn-link', text: 'Cancelar' });
+            wrap.replaceChildren(ta, el('div', { class: 'qd-add-actions' }, ok, cancel));
+            ta.focus();
+            function submit() {
+               var v = ta.value.trim();
+               if (!v) { return; }
+               ok.disabled = true;
+               api('cartao_add', { lista_id: l.id, name: v }).then(function (c) {
+                  l.cartoes.push(c);
+                  render();
+                  var b = boardEl.querySelector('.qd-list[data-id="' + l.id + '"] .qd-add-btn');
+                  if (b) { b.click(); }
+               }).catch(function () { ok.disabled = false; });
+            }
+            ok.addEventListener('click', submit);
+            cancel.addEventListener('click', render);
+            ta.addEventListener('keydown', function (e) {
+               if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
+               else if (e.key === 'Escape') { render(); }
+            });
+         });
+         wrap.append(btn);
+         return wrap;
+      }
+
+      function listEl(l) {
+         var title = el('span', { class: 'qd-list-title', text: l.name, title: CAN_EDIT ? 'Clique para renomear' : null });
+         title.addEventListener('click', function () { editListTitle(title, l); });
+         var del = CAN_EDIT ? el('button', { type: 'button', class: 'qd-icon-btn', title: 'Excluir lista' }, el('i', { class: 'ti ti-trash' })) : null;
+         if (del) {
+            del.addEventListener('click', function (e) {
+               e.stopPropagation();
+               var msg = 'Excluir a lista "' + l.name + '"' + (l.cartoes.length ? ' e seus ' + l.cartoes.length + ' cartão(ões)' : '') + '? Esta ação não pode ser desfeita.';
+               if (!confirm(msg)) { return; }
+               api('lista_delete', { id: l.id }).then(function () {
+                  state.listas = state.listas.filter(function (x) { return x.id !== l.id; });
+                  render();
+               });
+            });
+         }
+         var head = el('div', { class: 'qd-list-head' }, title, el('span', { class: 'qd-count', text: String(l.cartoes.length) }), del);
+         var body = el('div', { class: 'qd-cards', 'data-id': l.id }, l.cartoes.map(cardEl));
+         return el('div', { class: 'qd-list', 'data-id': l.id }, head, body, CAN_EDIT ? addCardBox(l) : null);
+      }
+
+      function newListEl() {
+         var box = el('div', { class: 'qd-newlist' });
+         var btn = el('button', { type: 'button', class: 'qd-add-btn', style: 'color:#fff' }, el('i', { class: 'ti ti-plus' }), ' Adicionar outra lista');
+         btn.addEventListener('click', function () {
+            var input = el('input', { class: 'qd-input', type: 'text', placeholder: 'Nome da lista…', maxlength: 255 });
+            var ok = el('button', { type: 'button', class: 'btn btn-primary btn-sm', text: 'Adicionar lista' });
+            var cancel = el('button', { type: 'button', class: 'btn btn-sm btn-link text-white', text: 'Cancelar' });
+            box.replaceChildren(input, el('div', { class: 'qd-add-actions' }, ok, cancel));
+            input.focus();
+            function submit() {
+               var v = input.value.trim();
+               if (!v) { return; }
+               ok.disabled = true;
+               api('lista_add', { name: v }).then(function (l) { state.listas.push(l); render(); }).catch(function () { ok.disabled = false; });
+            }
+            ok.addEventListener('click', submit);
+            cancel.addEventListener('click', render);
+            input.addEventListener('keydown', function (e) {
+               if (e.key === 'Enter') { submit(); } else if (e.key === 'Escape') { render(); }
+            });
+         });
+         box.append(btn);
+         return box;
+      }
+
+      function updateCounts() {
+         boardEl.querySelectorAll('.qd-list').forEach(function (n) {
+            var l = findList(parseInt(n.dataset.id, 10));
+            var c = n.querySelector('.qd-count');
+            if (l && c) { c.textContent = String(l.cartoes.length); }
+         });
+      }
+
+      function render() {
+         var scroll = boardEl.scrollLeft;
+         var lists = state.listas.map(listEl);
+         var wrap = el('div', { class: 'qd-lists', style: 'display:flex;align-items:flex-start;gap:12px' }, lists);
+         var kids = [wrap];
+         if (CAN_EDIT) { kids.push(newListEl()); }
+         boardEl.replaceChildren.apply(boardEl, kids);
+         boardEl.scrollLeft = scroll;
+         if (!CAN_EDIT) { return; }
+
+         // O GLPI embute a biblioteca html5sortable (global "sortable")
+         boardEl.querySelectorAll('.qd-cards').forEach(function (c) {
+            sortable(c, { items: '.qd-card', acceptFrom: '.qd-cards', placeholderClass: 'qd-placeholder', forcePlaceholderSize: true });
+            c.addEventListener('sortupdate', onCardMoved);
+         });
+         sortable(wrap, {
+            items: '.qd-list', handle: '.qd-list-head', orientation: 'horizontal',
+            placeholderClass: 'qd-placeholder-list', forcePlaceholderSize: true
+         });
+         wrap.addEventListener('sortupdate', onListMoved);
+      }
+
+      function onCardMoved(e) {
+         var d = e.detail;
+         var evt = { item: d.item, to: d.destination.container, from: d.origin.container };
+         var id = parseInt(evt.item.dataset.id, 10);
+         var toId = parseInt(evt.to.dataset.id, 10);
+         var fromId = parseInt(evt.from.dataset.id, 10);
+         var ordem = Array.prototype.map.call(evt.to.querySelectorAll('.qd-card'), function (n) { return parseInt(n.dataset.id, 10); });
+         var from = findList(fromId), dest = findList(toId);
+         if (!from || !dest) { return load(); }
+         var idx = from.cartoes.findIndex(function (c) { return c.id === id; });
+         if (idx < 0) { return load(); }
+         var card = from.cartoes.splice(idx, 1)[0];
+         dest.cartoes = ordem.map(function (i) { return i === id ? card : dest.cartoes.find(function (c) { return c.id === i; }); }).filter(Boolean);
+         updateCounts();
+         api('cartao_move', { id: id, lista_id: toId, ordem: ordem }).catch(load);
+      }
+
+      function onListMoved(e) {
+         var ordem = Array.prototype.map.call(e.detail.destination.container.querySelectorAll(':scope > .qd-list'), function (n) { return parseInt(n.dataset.id, 10); });
+         state.listas = ordem.map(findList).filter(Boolean);
+         api('lista_move', { ordem: ordem }).catch(load);
+      }
+
+      // ------------------------------------------------------------ modal do cartao
+      function withUsers(cb) {
+         if (users) { return cb(users); }
+         api('usuarios').then(function (u) { users = u; cb(u); });
+      }
+
+      function openCard(id) {
+         var card = findCard(id);
+         if (!card) { return; }
+         withUsers(function (all) { buildModal(card, all); });
+      }
+
+      function buildModal(card, all) {
+         var chosenColor = card.cor || '';
+         var selected = {};
+         card.members.forEach(function (m) { selected[m.id] = true; });
+
+         var titleInput = el('input', { type: 'text', class: 'form-control form-control-lg fw-bold', value: card.name, maxlength: 255, disabled: !CAN_EDIT });
+         var desc = el('textarea', { class: 'form-control', rows: '9', placeholder: 'Adicione uma descrição mais detalhada…', disabled: !CAN_EDIT });
+         desc.value = card.description || '';
+         var due = el('input', { type: 'date', class: 'form-control', value: card.date_due || '', disabled: !CAN_EDIT });
+         var done = el('input', { type: 'checkbox', class: 'form-check-input', disabled: !CAN_EDIT });
+         done.checked = !!card.is_done;
+
+         var swatches = el('div', { class: 'qd-swatches' });
+         Object.keys(COLOR_NAMES).forEach(function (key) {
+            var b = el('button', {
+               type: 'button', title: COLOR_NAMES[key], disabled: !CAN_EDIT,
+               class: 'qd-swatch' + (key === '' ? ' none' : '') + (key === chosenColor ? ' sel' : ''),
+               style: key ? 'background:' + COLORS[key] : null
+            });
+            b.addEventListener('click', function () {
+               chosenColor = key;
+               swatches.querySelectorAll('.qd-swatch').forEach(function (s) { s.classList.remove('sel'); });
+               b.classList.add('sel');
+            });
+            swatches.append(b);
+         });
+
+         var filter = el('input', { type: 'text', class: 'form-control form-control-sm mb-1', placeholder: 'Buscar membro…' });
+         var userList = el('div', { class: 'qd-userlist' });
+         all.forEach(function (u) {
+            var cb = el('input', { type: 'checkbox', class: 'form-check-input m-0', disabled: !CAN_EDIT });
+            cb.checked = !!selected[u.id];
+            cb.addEventListener('change', function () { if (cb.checked) { selected[u.id] = true; } else { delete selected[u.id]; } });
+            var row = el('label', { 'data-q': u.label.toLowerCase() }, cb, el('span', { class: 'qd-avatar', style: 'margin:0', text: u.initials }), el('span', { text: u.label }));
+            userList.append(row);
+         });
+         filter.addEventListener('input', function () {
+            var q = filter.value.trim().toLowerCase();
+            userList.querySelectorAll('label').forEach(function (r) { r.style.display = (!q || r.dataset.q.indexOf(q) >= 0) ? '' : 'none'; });
+         });
+
+         var btnSave = el('button', { type: 'button', class: 'btn btn-primary', text: 'Salvar' });
+         var btnDel = el('button', { type: 'button', class: 'btn btn-outline-danger me-auto' }, el('i', { class: 'ti ti-trash' }), ' Excluir cartão');
+         var btnClose = el('button', { type: 'button', class: 'btn btn-link', 'data-bs-dismiss': 'modal', text: CAN_EDIT ? 'Cancelar' : 'Fechar' });
+
+         var modalEl = el('div', { class: 'modal fade', id: 'qd-modal', tabindex: '-1' },
+            el('div', { class: 'modal-dialog modal-lg modal-dialog-scrollable' },
+               el('div', { class: 'modal-content' },
+                  el('div', { class: 'modal-header' }, titleInput, el('button', { type: 'button', class: 'btn-close', 'data-bs-dismiss': 'modal', 'aria-label': 'Fechar' })),
+                  el('div', { class: 'modal-body' },
+                     el('div', { class: 'row g-3' },
+                        el('div', { class: 'col-md-7' }, el('label', { class: 'form-label fw-bold', text: 'Descrição' }), desc),
+                        el('div', { class: 'col-md-5' },
+                           el('label', { class: 'form-label fw-bold', text: 'Prazo' }), due,
+                           el('label', { class: 'form-check mt-2' }, done, el('span', { class: 'form-check-label', text: 'Concluído' })),
+                           el('label', { class: 'form-label fw-bold mt-3', text: 'Cor' }), swatches,
+                           el('label', { class: 'form-label fw-bold mt-3', text: 'Membros' }), filter, userList
+                        )
+                     )
+                  ),
+                  el('div', { class: 'modal-footer' }, CAN_EDIT ? btnDel : null, btnClose, CAN_EDIT ? btnSave : null)
+               )
+            )
+         );
+         document.body.append(modalEl);
+         var modal = new bootstrap.Modal(modalEl);
+         modalEl.addEventListener('hidden.bs.modal', function () { modal.dispose(); modalEl.remove(); });
+
+         function save() {
+            var name = titleInput.value.trim();
+            if (!name) { toastErr('Informe o título do cartão.'); return; }
+            btnSave.disabled = true;
+            api('cartao_update', {
+               id: card.id, name: name, description: desc.value, date_due: due.value,
+               cor: chosenColor, is_done: done.checked ? 1 : 0,
+               members: Object.keys(selected).map(Number), members_set: 1
+            }).then(function (upd) {
+               Object.assign(card, upd);
+               modal.hide();
+               render();
+            }).catch(function () { btnSave.disabled = false; });
+         }
+         btnSave.addEventListener('click', save);
+         titleInput.addEventListener('keydown', function (e) { if (e.key === 'Enter' && CAN_EDIT) { save(); } });
+         btnDel.addEventListener('click', function () {
+            if (!confirm('Excluir o cartão "' + card.name + '"? Esta ação não pode ser desfeita.')) { return; }
+            api('cartao_delete', { id: card.id }).then(function () {
+               state.listas.forEach(function (l) { l.cartoes = l.cartoes.filter(function (c) { return c.id !== card.id; }); });
+               modal.hide();
+               render();
+            });
+         });
+         modal.show();
+      }
+
+      function load() {
+         return api('board').then(function (d) { state = d; render(); });
+      }
+
+      document.getElementById('qd-refresh').addEventListener('click', load);
+      load();
+   }
+
+   if (document.readyState === 'complete') { init(); } else { window.addEventListener('load', init); }
+})();
+</script>
+{% endverbatim %}
