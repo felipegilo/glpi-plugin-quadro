@@ -8,8 +8,17 @@
       </a>
       <h2 class="qd-title">{{ board_name }}</h2>
       <span class="qd-hint"><i class="ti ti-info-circle"></i> Clique em um cartão para ver e editar prazo, cor, membros e descrição</span>
-      <div class="ms-auto d-flex gap-2">
-         <button type="button" id="qd-refresh" class="btn btn-sm btn-light" title="Atualizar">
+      <div class="ms-auto d-flex gap-2 align-items-center flex-shrink-0">
+         <span id="qd-updated" class="qd-hint" title="Horário da última atualização dos dados"></span>
+         <select id="qd-auto" class="form-select form-select-sm" style="width:auto" title="Atualização automática do quadro" aria-label="Atualização automática">
+            <option value="0">Atualização manual</option>
+            <option value="15">A cada 15 segundos</option>
+            <option value="30">A cada 30 segundos</option>
+            <option value="60">A cada 1 minuto</option>
+            <option value="120">A cada 2 minutos</option>
+            <option value="300">A cada 5 minutos</option>
+         </select>
+         <button type="button" id="qd-refresh" class="btn btn-sm btn-light" title="Atualizar agora">
             <i class="ti ti-refresh"></i>
          </button>
          {% if can_edit %}
@@ -25,8 +34,8 @@
 {% verbatim %}
 <style>
 .qd-app { background: linear-gradient(135deg, #0079bf, #5067c5); border-radius: 8px; padding: 12px; margin: 0 0 12px; color: #172b4d; }
-.qd-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
-.qd-title { color: #fff; font-size: 1.35rem; font-weight: 700; margin: 0; }
+.qd-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+.qd-title { color: #fff; font-size: 1.35rem; font-weight: 700; margin: 0; white-space: nowrap; }
 .qd-board { display: flex; align-items: flex-start; gap: 12px; overflow-x: auto; padding-bottom: 12px; min-height: 60vh; }
 .qd-loading { color: #fff; padding: 24px; }
 .qd-list, .qd-newlist { flex: 0 0 280px; width: 280px; background: #f1f2f4; border-radius: 10px; padding: 8px; box-shadow: 0 1px 1px rgba(9,30,66,.25); max-height: calc(100vh - 230px); display: flex; flex-direction: column; }
@@ -46,7 +55,7 @@
 .qd-card-title { font-size: .9rem; word-break: break-word; white-space: pre-wrap; padding-right: 22px; }
 .qd-edit-btn { position: absolute; top: 6px; right: 6px; border: 0; background: transparent; color: #44546f; border-radius: 4px; padding: 1px 4px; line-height: 1; opacity: .5; }
 .qd-card:hover .qd-edit-btn, .qd-edit-btn:focus { opacity: 1; background: rgba(9,30,66,.1); }
-.qd-hint { color: rgba(255,255,255,.85); font-size: .8rem; }
+.qd-hint { color: rgba(255,255,255,.85); font-size: .8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .qd-check-item { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
 .qd-check-item.is-done span { text-decoration: line-through; color: #6b778c; }
 .qd-comment { display: flex; gap: 8px; margin-bottom: 12px; }
@@ -98,21 +107,24 @@
       var COLOR_NAMES = { '': 'Sem cor', green: 'Verde', yellow: 'Amarelo', orange: 'Laranja', red: 'Vermelho', purple: 'Roxo', blue: 'Azul' };
       var state = { listas: [] };
       var users = null;
+      var pending = 0;       // requisicoes em andamento (a atualizacao automatica espera)
+      var lastJson = '';     // ultimo estado recebido (evita redesenhar sem mudancas)
 
       function toastErr(msg) {
          if (typeof glpi_toast_error === 'function') { glpi_toast_error(msg); } else { alert(msg); }
       }
 
-      function api(action, data) {
+      function api(action, data, quiet) {
+         pending++;
          return new Promise(function (resolve, reject) {
             $.ajax({
                url: URL, type: 'POST', dataType: 'json',
                data: Object.assign({ action: action, quadros_id: BOARD }, data || {})
             }).done(function (r) {
-               if (r && r.ok) { resolve(r.data); } else { toastErr((r && r.error) || 'Erro inesperado.'); reject(r); }
+               if (r && r.ok) { resolve(r.data); } else { if (!quiet) { toastErr((r && r.error) || 'Erro inesperado.'); } reject(r); }
             }).fail(function () {
-               toastErr('Falha de comunicação com o servidor.'); reject();
-            });
+               if (!quiet) { toastErr('Falha de comunicação com o servidor.'); } reject();
+            }).always(function () { pending--; });
          });
       }
 
@@ -565,12 +577,70 @@
          modal.show();
       }
 
-      function load() {
-         return api('board').then(function (d) { state = d; render(); });
+      function pad2(n) { return (n < 10 ? '0' : '') + n; }
+
+      function markUpdated() {
+         var d = new Date();
+         var span = document.getElementById('qd-updated');
+         if (span) { span.textContent = 'Atualizado às ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds()); }
       }
 
-      document.getElementById('qd-refresh').addEventListener('click', load);
-      load();
+      /**
+       * Carrega o quadro. No modo silencioso (atualizacao automatica) nao mostra
+       * erros e so redesenha se os dados mudaram.
+       */
+      function load(silent) {
+         silent = silent === true;
+         return api('board', {}, silent).then(function (d) {
+            var json = JSON.stringify(d);
+            markUpdated();
+            if (silent && json === lastJson) { return; }
+            lastJson = json;
+            state = d;
+            render();
+         });
+      }
+
+      // ------------------------------------------------------ atualizacao automatica
+      var AUTO_KEY = 'qd_auto_refresh';
+      var AUTO_OPTIONS = ['0', '15', '30', '60', '120', '300'];
+      var autoSelect = document.getElementById('qd-auto');
+      var autoTimer = null;
+
+      /** Algo esta sendo feito na tela: nao atualizar para nao perder o trabalho. */
+      function isBusy() {
+         return document.hidden
+            || pending > 0
+            || !!document.getElementById('qd-modal')
+            || !!document.querySelector('.sortable-dragging')
+            || !!boardEl.querySelector('.qd-add textarea, .qd-newlist input, .qd-list-head input');
+      }
+
+      function setAuto(seconds) {
+         if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+         if (seconds > 0) {
+            autoTimer = setInterval(function () {
+               if (!isBusy()) { load(true).catch(function () {}); }
+            }, seconds * 1000);
+         }
+      }
+
+      var saved = '0';
+      try { saved = window.localStorage.getItem(AUTO_KEY) || '0'; } catch (e) { /* armazenamento indisponivel */ }
+      if (AUTO_OPTIONS.indexOf(saved) < 0) { saved = '0'; }
+      autoSelect.value = saved;
+      setAuto(parseInt(saved, 10));
+      autoSelect.addEventListener('change', function () {
+         try { window.localStorage.setItem(AUTO_KEY, autoSelect.value); } catch (e) { /* ignorado */ }
+         setAuto(parseInt(autoSelect.value, 10));
+      });
+      // Ao voltar para a aba, atualiza logo se o modo automatico estiver ligado
+      document.addEventListener('visibilitychange', function () {
+         if (!document.hidden && parseInt(autoSelect.value, 10) > 0 && !isBusy()) { load(true).catch(function () {}); }
+      });
+
+      document.getElementById('qd-refresh').addEventListener('click', function () { load(false).catch(function () {}); });
+      load(false);
    }
 
    if (document.readyState === 'complete') { init(); } else { window.addEventListener('load', init); }

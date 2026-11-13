@@ -11,6 +11,7 @@ Plugin para o **GLPI 11** com quadros de tarefas no estilo **Trello** (Kanban): 
 - **Checklist** no cartão, com barra de progresso: adicione itens (Enter), marque como feitos e remova.
 - **Comentários** no cartão, com autor e data (mais recentes primeiro). Cada pessoa exclui os próprios comentários; quem tem o direito de exclusão definitiva pode excluir qualquer um.
 - Selos nos cartões: prazo (vermelho se vencido, amarelo se vence em até 1 dia, verde se concluído), progresso do checklist (verde quando completo), quantidade de comentários, ícone de descrição e avatares dos membros.
+- **Atualização automática** do quadro (para ver o que outras pessoas fizeram): escolha no topo entre manual, 15 s, 30 s, 1, 2 ou 5 min; a escolha é lembrada no navegador. A atualização espera quando você está digitando, arrastando ou com um cartão aberto, e só redesenha se algo mudou. O botão de atualizar força a leitura na hora.
 - Permissões por perfil: quem tem apenas leitura vê o quadro, mas não edita (aba *Quadros* em Administração > Perfis).
 - Histórico de alterações do quadro e controle por entidade, como os demais itens do GLPI.
 - Não depende de bibliotecas externas: usa o `html5sortable`, o jQuery e o Bootstrap que já vêm com o GLPI.
