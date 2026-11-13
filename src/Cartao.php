@@ -8,7 +8,9 @@ class Cartao extends CommonDBTM
 {
     public static $rightname = 'plugin_quadros';
 
-    public const TABLE_MEMBROS = 'glpi_plugin_quadros_cartoes_users';
+    public const TABLE_MEMBROS     = 'glpi_plugin_quadros_cartoes_users';
+    public const TABLE_CHECKLIST   = 'glpi_plugin_quadros_checklist';
+    public const TABLE_COMENTARIOS = 'glpi_plugin_quadros_comentarios';
 
     public static function getTable($classname = null)
     {
@@ -28,5 +30,7 @@ class Cartao extends CommonDBTM
         /** @var \DBmysql $DB */
         global $DB;
         $DB->delete(self::TABLE_MEMBROS, ['plugin_quadros_cartoes_id' => $this->fields['id']]);
+        $DB->delete(self::TABLE_CHECKLIST, ['plugin_quadros_cartoes_id' => $this->fields['id']]);
+        $DB->delete(self::TABLE_COMENTARIOS, ['plugin_quadros_cartoes_id' => $this->fields['id']]);
     }
 }

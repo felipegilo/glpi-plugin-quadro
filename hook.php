@@ -83,6 +83,33 @@ function plugin_quadros_install()
         ) {$engine};");
     }
 
+    $checklist = Cartao::TABLE_CHECKLIST;
+    if (!$DB->tableExists($checklist)) {
+        $DB->doQuery("CREATE TABLE `$checklist` (
+            `id` int {$sign} NOT NULL AUTO_INCREMENT,
+            `plugin_quadros_cartoes_id` int {$sign} NOT NULL DEFAULT 0,
+            `name` varchar(255) DEFAULT NULL,
+            `is_done` tinyint NOT NULL DEFAULT 0,
+            `position` int NOT NULL DEFAULT 0,
+            PRIMARY KEY (`id`),
+            KEY `plugin_quadros_cartoes_id` (`plugin_quadros_cartoes_id`)
+        ) {$engine};");
+    }
+
+    $comentarios = Cartao::TABLE_COMENTARIOS;
+    if (!$DB->tableExists($comentarios)) {
+        $DB->doQuery("CREATE TABLE `$comentarios` (
+            `id` int {$sign} NOT NULL AUTO_INCREMENT,
+            `plugin_quadros_cartoes_id` int {$sign} NOT NULL DEFAULT 0,
+            `users_id` int {$sign} NOT NULL DEFAULT 0,
+            `content` text,
+            `date_creation` timestamp NULL DEFAULT NULL,
+            PRIMARY KEY (`id`),
+            KEY `plugin_quadros_cartoes_id` (`plugin_quadros_cartoes_id`),
+            KEY `users_id` (`users_id`)
+        ) {$engine};");
+    }
+
     // Direitos: cria uma unica vez e concede tudo ao perfil atual (ou Super-Admin via CLI)
     if (countElementsInTable('glpi_profilerights', ['name' => Quadro::$rightname]) === 0) {
         ProfileRight::addProfileRights([Quadro::$rightname]);
@@ -121,7 +148,7 @@ function plugin_quadros_uninstall()
     /** @var DBmysql $DB */
     global $DB;
 
-    foreach ([Cartao::TABLE_MEMBROS, Cartao::getTable(), Lista::getTable(), Quadro::getTable()] as $table) {
+    foreach ([Cartao::TABLE_COMENTARIOS, Cartao::TABLE_CHECKLIST, Cartao::TABLE_MEMBROS, Cartao::getTable(), Lista::getTable(), Quadro::getTable()] as $table) {
         $DB->doQuery("DROP TABLE IF EXISTS `$table`");
     }
 

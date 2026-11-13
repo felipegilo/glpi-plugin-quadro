@@ -4,7 +4,7 @@ use Glpi\Plugin\Hooks;
 use GlpiPlugin\Quadros\Profile as QuadrosProfile;
 use GlpiPlugin\Quadros\Quadro;
 
-define('PLUGIN_QUADROS_VERSION', '0.1.0');
+define('PLUGIN_QUADROS_VERSION', '0.2.0');
 define('PLUGIN_QUADROS_MIN_GLPI', '11.0.0');
 define('PLUGIN_QUADROS_MAX_GLPI', '11.0.99');
 

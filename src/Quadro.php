@@ -157,6 +157,8 @@ class Quadro extends CommonDBTM
         ])), 'id');
         if ($cartoes) {
             $DB->delete(Cartao::TABLE_MEMBROS, ['plugin_quadros_cartoes_id' => $cartoes]);
+            $DB->delete(Cartao::TABLE_CHECKLIST, ['plugin_quadros_cartoes_id' => $cartoes]);
+            $DB->delete(Cartao::TABLE_COMENTARIOS, ['plugin_quadros_cartoes_id' => $cartoes]);
         }
         $DB->delete(Cartao::getTable(), ['plugin_quadros_quadros_id' => $this->fields['id']]);
         $DB->delete(Lista::getTable(), ['plugin_quadros_quadros_id' => $this->fields['id']]);

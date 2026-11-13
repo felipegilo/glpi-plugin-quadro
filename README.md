@@ -7,8 +7,10 @@ Plugin para o **GLPI 11** com quadros de tarefas no estilo **Trello** (Kanban): 
 - **Quadros**: crie vários quadros; cada novo quadro já vem com as listas *A fazer*, *Em andamento* e *Concluído*.
 - **Listas**: adicionar, renomear (clique no título), excluir e **reordenar arrastando pelo cabeçalho**.
 - **Cartões**: adicionar rapidamente em cada lista e **arrastar entre listas** (a posição é salva na hora).
-- **Detalhes do cartão** (clique no cartão): título, descrição, **prazo**, **cor**, marcação de **concluído** e **membros** (usuários do GLPI, com busca).
-- Selos nos cartões: prazo (vermelho se vencido, amarelo se vence em até 1 dia, verde se concluído), ícone de descrição e avatares dos membros.
+- **Detalhes do cartão** (clique no cartão ou no lápis): título, descrição, **prazo**, **cor**, marcação de **concluído** e **membros** (usuários do GLPI, com busca).
+- **Checklist** no cartão, com barra de progresso: adicione itens (Enter), marque como feitos e remova.
+- **Comentários** no cartão, com autor e data (mais recentes primeiro). Cada pessoa exclui os próprios comentários; quem tem o direito de exclusão definitiva pode excluir qualquer um.
+- Selos nos cartões: prazo (vermelho se vencido, amarelo se vence em até 1 dia, verde se concluído), progresso do checklist (verde quando completo), quantidade de comentários, ícone de descrição e avatares dos membros.
 - Permissões por perfil: quem tem apenas leitura vê o quadro, mas não edita (aba *Quadros* em Administração > Perfis).
 - Histórico de alterações do quadro e controle por entidade, como os demais itens do GLPI.
 - Não depende de bibliotecas externas: usa o `html5sortable`, o jQuery e o Bootstrap que já vêm com o GLPI.
@@ -68,6 +70,8 @@ quadros/
 - `glpi_plugin_quadros_listas`
 - `glpi_plugin_quadros_cartoes`
 - `glpi_plugin_quadros_cartoes_users`
+- `glpi_plugin_quadros_checklist`
+- `glpi_plugin_quadros_comentarios`
 
 A desinstalação remove essas tabelas e os direitos do plugin.
 

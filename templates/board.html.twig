@@ -47,6 +47,10 @@
 .qd-edit-btn { position: absolute; top: 6px; right: 6px; border: 0; background: transparent; color: #44546f; border-radius: 4px; padding: 1px 4px; line-height: 1; opacity: .5; }
 .qd-card:hover .qd-edit-btn, .qd-edit-btn:focus { opacity: 1; background: rgba(9,30,66,.1); }
 .qd-hint { color: rgba(255,255,255,.85); font-size: .8rem; }
+.qd-check-item { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+.qd-check-item.is-done span { text-decoration: line-through; color: #6b778c; }
+.qd-comment { display: flex; gap: 8px; margin-bottom: 12px; }
+.qd-comment-text { white-space: pre-wrap; word-break: break-word; background: rgba(9,30,66,.05); border-radius: 6px; padding: 6px 8px; margin: 2px 0; }
 .qd-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 8px; }
 .qd-badges { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .qd-badge { display: inline-flex; align-items: center; gap: 3px; font-size: .75rem; padding: 1px 6px; border-radius: 4px; background: rgba(9,30,66,.08); color: #44546f; }
@@ -161,6 +165,12 @@
          }
          if (c.description) {
             badges.push(el('span', { class: 'qd-badge-ico', title: 'Possui descrição' }, el('i', { class: 'ti ti-align-left' })));
+         }
+         if (c.check_total > 0) {
+            badges.push(el('span', { class: 'qd-badge' + (c.check_done === c.check_total ? ' done' : ''), title: 'Checklist' }, el('i', { class: 'ti ti-checkbox' }), c.check_done + '/' + c.check_total));
+         }
+         if (c.comentarios > 0) {
+            badges.push(el('span', { class: 'qd-badge-ico', title: 'Comentários' }, el('i', { class: 'ti ti-message' }), ' ' + c.comentarios));
          }
          var avatars = c.members.map(function (m) { return el('span', { class: 'qd-avatar', title: m.label, text: m.initials }); });
          return el('div', { class: 'qd-card' + (c.is_done ? ' is-done' : ''), 'data-id': c.id, onclick: function () { openCard(c.id); } },
@@ -330,16 +340,128 @@
          var card = findCard(id);
          if (!card) { return; }
          withUsers(function (all) {
-            try {
-               buildModal(card, all);
-            } catch (err) {
-               if (window.console) { console.error(err); }
-               toastErr('Não foi possível abrir os detalhes do cartão.');
-            }
+            api('cartao_detalhes', { id: card.id }).then(function (det) {
+               try {
+                  buildModal(card, all, det);
+               } catch (err) {
+                  if (window.console) { console.error(err); }
+                  toastErr('Não foi possível abrir os detalhes do cartão.');
+               }
+            });
          });
       }
 
-      function buildModal(card, all) {
+      function fmtDate(s) {
+         var m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/.exec(s || '');
+         return m ? m[3] + '/' + m[2] + '/' + m[1] + ' ' + m[4] + ':' + m[5] : (s || '');
+      }
+
+      function applyCounts(card, r) {
+         if (r && typeof r.check_total === 'number') { card.check_total = r.check_total; card.check_done = r.check_done; card.comentarios = r.comentarios; }
+      }
+
+      function buildChecklist(card, det) {
+         var items = det.checklist.slice();
+         var list = el('div', { class: 'qd-check-list' });
+         var bar = el('div', { class: 'progress-bar bg-success', style: 'width:0%' });
+         var pctLabel = el('span', { class: 'small text-muted' });
+
+         function refresh() {
+            var total = items.length, feitos = items.filter(function (i) { return i.is_done; }).length;
+            var pct = total ? Math.round(feitos * 100 / total) : 0;
+            bar.style.width = pct + '%';
+            pctLabel.textContent = total ? (feitos + '/' + total + ' (' + pct + '%)') : 'Nenhum item';
+            list.replaceChildren.apply(list, items.map(itemEl));
+         }
+
+         function itemEl(it) {
+            var cb = el('input', { type: 'checkbox', class: 'form-check-input m-0', disabled: !CAN_EDIT });
+            cb.checked = !!it.is_done;
+            cb.addEventListener('change', function () {
+               api('item_toggle', { id: it.id, is_done: cb.checked ? 1 : 0 }).then(function (r) {
+                  it.is_done = r.item.is_done; applyCounts(card, r); refresh();
+               }).catch(function () { cb.checked = !cb.checked; });
+            });
+            var del = CAN_EDIT ? el('button', { type: 'button', class: 'qd-icon-btn', title: 'Remover item' }, el('i', { class: 'ti ti-x' })) : null;
+            if (del) {
+               del.addEventListener('click', function () {
+                  api('item_delete', { id: it.id }).then(function (r) {
+                     items = items.filter(function (x) { return x.id !== it.id; }); applyCounts(card, r); refresh();
+                  });
+               });
+            }
+            return el('div', { class: 'qd-check-item' + (it.is_done ? ' is-done' : '') }, cb, el('span', { class: 'flex-fill', text: it.name }), del);
+         }
+
+         var add = null;
+         if (CAN_EDIT) {
+            var input = el('input', { type: 'text', class: 'form-control form-control-sm', placeholder: 'Adicionar um item…', maxlength: 255 });
+            var btn = el('button', { type: 'button', class: 'btn btn-sm btn-outline-primary', text: 'Adicionar' });
+            var send = function () {
+               var v = input.value.trim();
+               if (!v) { return; }
+               btn.disabled = true;
+               api('item_add', { cartao_id: card.id, name: v }).then(function (r) {
+                  items.push(r.item); applyCounts(card, r); input.value = ''; refresh(); input.focus();
+               }).catch(function () {}).finally(function () { btn.disabled = false; });
+            };
+            btn.addEventListener('click', send);
+            input.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); send(); } });
+            add = el('div', { class: 'd-flex gap-2 mt-2' }, input, btn);
+         }
+
+         refresh();
+         return el('div', { class: 'mt-3' },
+            el('div', { class: 'd-flex align-items-center gap-2' }, el('label', { class: 'form-label fw-bold m-0', text: 'Checklist' }), pctLabel),
+            el('div', { class: 'progress my-2', style: 'height:6px' }, bar), list, add);
+      }
+
+      function buildComments(card, det) {
+         var items = det.comentarios.slice();
+         var list = el('div', { class: 'qd-comments' });
+
+         function refresh() {
+            list.replaceChildren.apply(list, items.length ? items.map(commentEl) : [el('div', { class: 'small text-muted', text: 'Nenhum comentário ainda.' })]);
+         }
+
+         function commentEl(c) {
+            var del = c.can_delete ? el('button', { type: 'button', class: 'btn btn-link btn-sm p-0 text-danger', text: 'Excluir' }) : null;
+            if (del) {
+               del.addEventListener('click', function () {
+                  if (!confirm('Excluir este comentário?')) { return; }
+                  api('comentario_delete', { id: c.id }).then(function (r) {
+                     items = items.filter(function (x) { return x.id !== c.id; }); applyCounts(card, r); refresh();
+                  });
+               });
+            }
+            return el('div', { class: 'qd-comment' },
+               el('span', { class: 'qd-avatar', style: 'margin:0;flex:0 0 auto', title: c.author.label, text: c.author.initials }),
+               el('div', { class: 'flex-fill' },
+                  el('div', {}, el('strong', { text: c.author.label }), ' ', el('span', { class: 'small text-muted', text: fmtDate(c.date) })),
+                  el('div', { class: 'qd-comment-text', text: c.content }),
+                  del));
+         }
+
+         var form = null;
+         if (CAN_EDIT) {
+            var ta = el('textarea', { class: 'form-control', rows: '2', placeholder: 'Escreva um comentário…', maxlength: 5000 });
+            var btn = el('button', { type: 'button', class: 'btn btn-sm btn-primary mt-2', text: 'Comentar' });
+            btn.addEventListener('click', function () {
+               var v = ta.value.trim();
+               if (!v) { return; }
+               btn.disabled = true;
+               api('comentario_add', { cartao_id: card.id, content: v }).then(function (r) {
+                  items.unshift(r.comentario); applyCounts(card, r); ta.value = ''; refresh();
+               }).catch(function () {}).finally(function () { btn.disabled = false; });
+            });
+            form = el('div', { class: 'mb-3' }, ta, btn);
+         }
+
+         refresh();
+         return el('div', { class: 'mt-3' }, el('label', { class: 'form-label fw-bold', text: 'Comentários' }), form, list);
+      }
+
+      function buildModal(card, all, det) {
          var chosenColor = card.cor || '';
          var selected = {};
          card.members.forEach(function (m) { selected[m.id] = true; });
@@ -390,7 +512,9 @@
                   el('div', { class: 'modal-header' }, titleInput, el('button', { type: 'button', class: 'btn-close', 'data-bs-dismiss': 'modal', 'aria-label': 'Fechar' })),
                   el('div', { class: 'modal-body' },
                      el('div', { class: 'row g-3' },
-                        el('div', { class: 'col-md-7' }, el('label', { class: 'form-label fw-bold', text: 'Descrição' }), desc),
+                        el('div', { class: 'col-md-7' },
+                           el('label', { class: 'form-label fw-bold', text: 'Descrição' }), desc,
+                           buildChecklist(card, det), buildComments(card, det)),
                         el('div', { class: 'col-md-5' },
                            el('label', { class: 'form-label fw-bold', text: 'Prazo' }), due,
                            el('label', { class: 'form-check mt-2' }, done, el('span', { class: 'form-check-label', text: 'Concluído' })),
@@ -411,6 +535,7 @@
             document.removeEventListener('keydown', onEsc);
             modal.dispose();
             modalEl.remove();
+            render();
          });
 
          function save() {

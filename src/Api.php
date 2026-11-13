@@ -63,6 +63,27 @@ class Api
                 $cartao = self::cartao($qid, (int) ($p['id'] ?? 0));
                 $lista  = self::lista($qid, (int) ($p['lista_id'] ?? 0));
                 return self::cartaoMove($qid, $cartao, $lista, self::ids($p['ordem'] ?? []));
+
+            case 'cartao_detalhes':
+                self::board($qid, READ);
+                return self::detalhes(self::cartao($qid, (int) ($p['id'] ?? 0)));
+
+            case 'item_add':
+                self::board($qid, UPDATE);
+                return self::itemAdd(self::cartao($qid, (int) ($p['cartao_id'] ?? 0)), self::nome($p['name'] ?? ''));
+            case 'item_toggle':
+                self::board($qid, UPDATE);
+                return self::itemToggle($qid, (int) ($p['id'] ?? 0), (int) (bool) ($p['is_done'] ?? 0));
+            case 'item_delete':
+                self::board($qid, UPDATE);
+                return self::itemDelete($qid, (int) ($p['id'] ?? 0));
+
+            case 'comentario_add':
+                self::board($qid, UPDATE);
+                return self::comentarioAdd(self::cartao($qid, (int) ($p['cartao_id'] ?? 0)), (string) ($p['content'] ?? ''));
+            case 'comentario_delete':
+                self::board($qid, READ);
+                return self::comentarioDelete($qid, (int) ($p['id'] ?? 0));
         }
         throw new ApiException('Ação inválida.');
     }
@@ -189,9 +210,12 @@ class Api
             }
         }
 
+        $contagens = $cartoes ? self::contagensVarios(array_keys($cartoes)) : [];
+
         foreach ($cartoes as $c) {
             $lid = $c['_lista'];
             unset($c['_lista']);
+            $c += $contagens[$c['id']] ?? ['check_total' => 0, 'check_done' => 0, 'comentarios' => 0];
             if (isset($listas[$lid])) {
                 $listas[$lid]['cartoes'][] = $c;
             }
@@ -302,6 +326,7 @@ class Api
         return [
             'id' => (int) $id, 'name' => $nome, 'description' => '', 'date_due' => null,
             'cor' => '', 'is_done' => 0, 'members' => [],
+            'check_total' => 0, 'check_done' => 0, 'comentarios' => 0,
         ];
     }
 
@@ -376,7 +401,7 @@ class Api
             'cor'         => (string) $c->fields['cor'],
             'is_done'     => (int) $c->fields['is_done'],
             'members'     => $membros,
-        ];
+        ] + self::contagens((int) $c->getID());
     }
 
     private static function cartaoDelete(Cartao $c): array
@@ -384,6 +409,187 @@ class Api
         $id = (int) $c->getID();
         $c->delete(['id' => $id], true);
         return ['id' => $id];
+    }
+
+    // ------------------------------------------------- checklist e comentarios
+
+    /** @return array<int, array{check_total:int, check_done:int, comentarios:int}> */
+    private static function contagensVarios(array $cartao_ids): array
+    {
+        /** @var \DBmysql $DB */
+        global $DB;
+
+        $out = [];
+        foreach ($cartao_ids as $id) {
+            $out[(int) $id] = ['check_total' => 0, 'check_done' => 0, 'comentarios' => 0];
+        }
+        foreach ($DB->request([
+            'SELECT'  => ['plugin_quadros_cartoes_id', 'COUNT' => 'id AS total', 'SUM' => 'is_done AS feitos'],
+            'FROM'    => Cartao::TABLE_CHECKLIST,
+            'WHERE'   => ['plugin_quadros_cartoes_id' => $cartao_ids],
+            'GROUPBY' => 'plugin_quadros_cartoes_id',
+        ]) as $r) {
+            $out[(int) $r['plugin_quadros_cartoes_id']]['check_total'] = (int) $r['total'];
+            $out[(int) $r['plugin_quadros_cartoes_id']]['check_done']  = (int) $r['feitos'];
+        }
+        foreach ($DB->request([
+            'SELECT'  => ['plugin_quadros_cartoes_id', 'COUNT' => 'id AS total'],
+            'FROM'    => Cartao::TABLE_COMENTARIOS,
+            'WHERE'   => ['plugin_quadros_cartoes_id' => $cartao_ids],
+            'GROUPBY' => 'plugin_quadros_cartoes_id',
+        ]) as $r) {
+            $out[(int) $r['plugin_quadros_cartoes_id']]['comentarios'] = (int) $r['total'];
+        }
+        return $out;
+    }
+
+    private static function contagens(int $cartao_id): array
+    {
+        return self::contagensVarios([$cartao_id])[$cartao_id];
+    }
+
+    private static function itemRow(array $r): array
+    {
+        return ['id' => (int) $r['id'], 'name' => $r['name'], 'is_done' => (int) $r['is_done']];
+    }
+
+    private static function comentarioRow(array $r): array
+    {
+        $autor = self::userLabel($r);
+        return [
+            'id'      => (int) $r['id'],
+            'content' => (string) $r['content'],
+            'date'    => $r['date_creation'],
+            'author'  => ['id' => (int) $r['users_id'], 'label' => $autor['label'], 'initials' => $autor['initials']],
+            'can_delete' => self::podeApagarComentario((int) $r['users_id']),
+        ];
+    }
+
+    private static function podeApagarComentario(int $autor_id): bool
+    {
+        return ($autor_id > 0 && $autor_id === (int) Session::getLoginUserID())
+            || Session::haveRight(Quadro::$rightname, PURGE);
+    }
+
+    private static function detalhes(Cartao $c): array
+    {
+        /** @var \DBmysql $DB */
+        global $DB;
+
+        $itens = [];
+        foreach ($DB->request([
+            'FROM'  => Cartao::TABLE_CHECKLIST,
+            'WHERE' => ['plugin_quadros_cartoes_id' => $c->getID()],
+            'ORDER' => ['position', 'id'],
+        ]) as $r) {
+            $itens[] = self::itemRow($r);
+        }
+
+        $coment = [];
+        foreach ($DB->request([
+            'SELECT'     => ['m.id', 'm.content', 'm.date_creation', 'm.users_id', 'u.name', 'u.firstname', 'u.realname'],
+            'FROM'       => Cartao::TABLE_COMENTARIOS . ' AS m',
+            'LEFT JOIN'  => ['glpi_users AS u' => ['ON' => ['m' => 'users_id', 'u' => 'id']]],
+            'WHERE'      => ['m.plugin_quadros_cartoes_id' => $c->getID()],
+            'ORDER'      => ['m.date_creation DESC', 'm.id DESC'],
+        ]) as $r) {
+            $r['name'] = $r['name'] ?? 'usuário removido';
+            $coment[] = self::comentarioRow($r + ['firstname' => $r['firstname'] ?? '', 'realname' => $r['realname'] ?? '']);
+        }
+        return ['checklist' => $itens, 'comentarios' => $coment] + self::contagens((int) $c->getID());
+    }
+
+    private static function itemDoQuadro(int $qid, int $id): array
+    {
+        /** @var \DBmysql $DB */
+        global $DB;
+
+        $r = $DB->request(['FROM' => Cartao::TABLE_CHECKLIST, 'WHERE' => ['id' => $id]])->current();
+        if (!$r) {
+            throw new ApiException('Item não encontrado.');
+        }
+        self::cartao($qid, (int) $r['plugin_quadros_cartoes_id']); // garante que pertence a este quadro
+        return $r;
+    }
+
+    private static function itemAdd(Cartao $c, string $nome): array
+    {
+        /** @var \DBmysql $DB */
+        global $DB;
+
+        $DB->insert(Cartao::TABLE_CHECKLIST, [
+            'plugin_quadros_cartoes_id' => $c->getID(),
+            'name'                      => $nome,
+            'is_done'                   => 0,
+            'position'                  => self::nextPosition(Cartao::TABLE_CHECKLIST, ['plugin_quadros_cartoes_id' => $c->getID()]),
+        ]);
+        $id = (int) $DB->insertId();
+        return ['item' => ['id' => $id, 'name' => $nome, 'is_done' => 0]] + self::contagens((int) $c->getID());
+    }
+
+    private static function itemToggle(int $qid, int $id, int $feito): array
+    {
+        /** @var \DBmysql $DB */
+        global $DB;
+
+        $r = self::itemDoQuadro($qid, $id);
+        $DB->update(Cartao::TABLE_CHECKLIST, ['is_done' => $feito], ['id' => $id]);
+        $r['is_done'] = $feito;
+        return ['item' => self::itemRow($r)] + self::contagens((int) $r['plugin_quadros_cartoes_id']);
+    }
+
+    private static function itemDelete(int $qid, int $id): array
+    {
+        /** @var \DBmysql $DB */
+        global $DB;
+
+        $r = self::itemDoQuadro($qid, $id);
+        $DB->delete(Cartao::TABLE_CHECKLIST, ['id' => $id]);
+        return ['id' => $id] + self::contagens((int) $r['plugin_quadros_cartoes_id']);
+    }
+
+    private static function comentarioAdd(Cartao $c, string $texto): array
+    {
+        /** @var \DBmysql $DB */
+        global $DB;
+
+        $texto = trim($texto);
+        if ($texto === '') {
+            throw new ApiException('Escreva o comentário.');
+        }
+        $texto = mb_substr($texto, 0, 5000);
+        $uid   = (int) Session::getLoginUserID();
+        $agora = date('Y-m-d H:i:s');
+        $DB->insert(Cartao::TABLE_COMENTARIOS, [
+            'plugin_quadros_cartoes_id' => $c->getID(),
+            'users_id'                  => $uid,
+            'content'                   => $texto,
+            'date_creation'             => $agora,
+        ]);
+        $id = (int) $DB->insertId();
+        $u  = $DB->request(['SELECT' => ['name', 'firstname', 'realname'], 'FROM' => 'glpi_users', 'WHERE' => ['id' => $uid]])->current()
+            ?: ['name' => 'usuário', 'firstname' => '', 'realname' => ''];
+        $row = self::comentarioRow([
+            'id' => $id, 'content' => $texto, 'date_creation' => $agora, 'users_id' => $uid,
+        ] + $u);
+        return ['comentario' => $row] + self::contagens((int) $c->getID());
+    }
+
+    private static function comentarioDelete(int $qid, int $id): array
+    {
+        /** @var \DBmysql $DB */
+        global $DB;
+
+        $r = $DB->request(['FROM' => Cartao::TABLE_COMENTARIOS, 'WHERE' => ['id' => $id]])->current();
+        if (!$r) {
+            throw new ApiException('Comentário não encontrado.');
+        }
+        self::cartao($qid, (int) $r['plugin_quadros_cartoes_id']);
+        if (!self::podeApagarComentario((int) $r['users_id'])) {
+            throw new ApiException('Você só pode excluir os seus próprios comentários.');
+        }
+        $DB->delete(Cartao::TABLE_COMENTARIOS, ['id' => $id]);
+        return ['id' => $id] + self::contagens((int) $r['plugin_quadros_cartoes_id']);
     }
 
     private static function cartaoMove(int $qid, Cartao $c, Lista $destino, array $ordem): array
