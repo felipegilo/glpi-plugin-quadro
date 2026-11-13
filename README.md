@@ -26,7 +26,7 @@ Plugin para o **GLPI 11** com quadros de tarefas no estilo **Trello** (Kanban): 
 
    ```bash
    cd /var/www/html/glpi/plugins
-   git clone https://github.com/SEU-USUARIO/glpi-plugin-quadros.git quadros
+   git clone https://github.com/felipegilo/glpi-plugin-quadro.git quadros
    chown -R www-data:www-data quadros
    ```
 
